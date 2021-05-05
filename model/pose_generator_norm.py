@@ -99,7 +99,7 @@ class hr_pose_generator(nn.Module):
         self.rnn_noise = nn.GRU( 10, 10, batch_first=True)
         self.rnn_noise_squashing = nn.Tanh()
         # state size. hidden_channel_num*8 x 360 x 640
-        self.layer0 = nn.Linear(266,linear_hidden)
+        self.layer0 = nn.Linear(267,linear_hidden)
         #self.relu = nn.ReLU()
         #self.bn=nn.BatchNorm1d(50)
         self.layer1 = res_linear_layer(linear_hidden = linear_hidden)
@@ -109,21 +109,31 @@ class hr_pose_generator(nn.Module):
         self.final_linear1 = nn.Linear(linear_hidden,128)
         self.final_linear2 = nn.Linear(linear_hidden,3)
         self.final_linear3 = nn.Linear(128,36)
+
+        self.first = nn.Linear(36,50)
         #self.sa = PAM_Module(50)
         #self.ca = CAM_Module(50)
         #self.ba = CAM_Module(16)
         self.attn = PointTransformerLayer(dim = 128, pos_mlp_hidden_dim = 64, attn_mlp_hidden_mult = 4)
 
-    def forward(self,input):
+    def forward(self, input, first_skeleton):
         #print(input.size()) [16, 50, 256]
+        #print('first_skeleton', first_skeleton.size()) [16, 1, 36]
+        first_skeleton = first_skeleton.view(self.batch,36) # [16, 36]
+        first_skeleton = self.first(first_skeleton) #[16, 50]
+        first_skeleton = first_skeleton.view(self.batch,50,1) #[16, 50, 1]
+        #print('first_skeleton', first_skeleton.size()) 
+
         noise = torch.FloatTensor(self.batch, 50, 10).normal_(0, 0.33).cuda()
         #print(noise.size()) [16, 50, 10]
         aux, h = self.rnn_noise(noise)
         #print('aux', aux.size()) [16, 50, 10]
         aux = self.rnn_noise_squashing(aux)
-        input = torch.cat([input, aux], 2)
-        #print('in',input.size()) [16, 50, 266]
-        input = input.view(-1,266)
+        #print('aux', aux.size()) [16, 50, 10]
+        input = torch.cat([input, aux, first_skeleton], 2) #[16, 50, 267]
+        #print('input',input.size())
+        input = input.view(-1,267)
+        #print('input', input.size()) [800, 266]
         output = self.layer0(input)
         output = self.layer1(output) + output
         output = self.layer2(output) + output
@@ -165,11 +175,11 @@ class Generator(nn.Module):
         self.pose_generator=hr_pose_generator(batch)
         self.batch=batch
 
-    def forward(self,input):
+    def forward(self,input, first_skeleton):
         #print('audio input', input.size()) #[50, 16batchsize, 1600]
         output=self.audio_encoder(input)#input 50,1,1600
         #print('audio output', output.size()) #[16, 50, 256]
-        output=self.pose_generator(output)#1，50，36
+        output=self.pose_generator(output, first_skeleton)#1，50，36
         #print('skeleton ouput', output.size()) #[16, 50, 36]
         return output#1,50,36
         

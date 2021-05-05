@@ -150,13 +150,19 @@ def train(generator,frame_discriminator,seq_discriminator,opt):
         # ------------------
             generator.train()
             optimizer_G.zero_grad()
-
+            #print('audio', audio.size()) [50, 16, 1600]
+            #print('first_skeleton', pose[:,0:1].size())
             # GAN loss
-            fake = generator(audio).contiguous()#1,50,36
+            fake = generator(audio, pose[:,0:1]).contiguous()#1,50,36
+            #print('fake', fake.size()) [16, 50, 36]
+            #print('pose', pose.size()) [16, 50, 36]
             frame_fake = frame_discriminator(fake)#1,50
             seq_fake=seq_discriminator(fake,audio)#1
             loss_frame = adversarial_loss(frame_fake, frame_valid)
             loss_seq= adversarial_loss(seq_fake,seq_valid)
+            
+            print('frame_valid', frame_valid.size())
+            print('seq_valid', seq_valid.size())
             loss_pixel = criterion_pixelwise(fake, pose)
             loss_GCN = VGGLoss(fake,pose)
             loss_Frame_D = D_Feature(seq_discriminator, fake, pose)
